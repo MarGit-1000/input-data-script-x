@@ -1,19 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { initializeApp } from 'firebase/app';
-import { getFirestore, collection, getDocs, doc, updateDoc, deleteDoc, addDoc } from 'firebase/firestore';
-import { Search, Edit2, Trash2, Plus, X, Save, Eye, EyeOff, Menu, Database, FileText } from 'lucide-react';
-
-const firebaseConfig = {
-  apiKey: "AIzaSyCldbqiZLTRvtQCfO9_2EiBGeND9fxALCE",
-  authDomain: "x-website-script.firebaseapp.com",
-  projectId: "x-website-script",
-  storageBucket: "x-website-script.firebasestorage.app",
-  messagingSenderId: "848346981755",
-  appId: "1:848346981755:web:aff6aa81591ff35f2509de"
-};
-
-const app = initializeApp(firebaseConfig);
-const db = getFirestore(app);
+import { Search, Edit2, Trash2, Plus, X, Save, Eye, EyeOff, Menu, Database, FileText, RefreshCw } from 'lucide-react';
 
 export default function Dashboard() {
   const [scripts, setScripts] = useState([]);
@@ -25,29 +11,65 @@ export default function Dashboard() {
   const [showPassword, setShowPassword] = useState({});
   const [sidebarOpen, setSidebarOpen] = useState(true);
   const [modalOpen, setModalOpen] = useState(false);
+  const [db, setDb] = useState(null);
+  const [error, setError] = useState(null);
 
   useEffect(() => {
-    fetchData();
+    initFirebase();
   }, []);
 
-  const fetchData = async () => {
-    setLoading(true);
+  const initFirebase = async () => {
     try {
-      const scriptsSnapshot = await getDocs(collection(db, 'scripts'));
+      const script = document.createElement('script');
+      script.src = 'https://www.gstatic.com/firebasejs/9.22.0/firebase-app-compat.js';
+      script.onload = () => {
+        const firestoreScript = document.createElement('script');
+        firestoreScript.src = 'https://www.gstatic.com/firebasejs/9.22.0/firebase-firestore-compat.js';
+        firestoreScript.onload = () => {
+          const firebaseConfig = {
+            apiKey: "AIzaSyCldbqiZLTRvtQCfO9_2EiBGeND9fxALCE",
+            authDomain: "x-website-script.firebaseapp.com",
+            projectId: "x-website-script",
+            storageBucket: "x-website-script.firebasestorage.app",
+            messagingSenderId: "848346981755",
+            appId: "1:848346981755:web:aff6aa81591ff35f2509de"
+          };
+          
+          window.firebase.initializeApp(firebaseConfig);
+          setDb(window.firebase.firestore());
+          fetchData();
+        };
+        document.head.appendChild(firestoreScript);
+      };
+      document.head.appendChild(script);
+    } catch (err) {
+      setError('Failed to initialize Firebase: ' + err.message);
+      setLoading(false);
+    }
+  };
+
+  const fetchData = async () => {
+    if (!db) return;
+    
+    setLoading(true);
+    setError(null);
+    try {
+      const scriptsSnapshot = await db.collection('scripts').get();
       const scriptsData = scriptsSnapshot.docs.map(doc => ({
         id: doc.id,
         ...doc.data()
       }));
       setScripts(scriptsData);
 
-      const statsSnapshot = await getDocs(collection(db, 'stats'));
+      const statsSnapshot = await db.collection('stats').get();
       const statsData = statsSnapshot.docs.map(doc => ({
         id: doc.id,
         ...doc.data()
       }));
       setStats(statsData);
-    } catch (error) {
-      console.error('Error fetching data:', error);
+    } catch (err) {
+      setError('Error fetching data: ' + err.message);
+      console.error('Error fetching data:', err);
     }
     setLoading(false);
   };
@@ -58,31 +80,31 @@ export default function Dashboard() {
   };
 
   const handleSave = async () => {
-    if (!editingItem) return;
+    if (!editingItem || !db) return;
     
     try {
       const collectionName = activeTab;
-      const docRef = doc(db, collectionName, editingItem.id);
       const { id, ...dataToUpdate } = editingItem;
-      await updateDoc(docRef, dataToUpdate);
+      await db.collection(collectionName).doc(id).update(dataToUpdate);
       await fetchData();
       setModalOpen(false);
       setEditingItem(null);
-    } catch (error) {
-      console.error('Error updating document:', error);
-      alert('Gagal menyimpan perubahan: ' + error.message);
+    } catch (err) {
+      setError('Gagal menyimpan perubahan: ' + err.message);
+      console.error('Error updating document:', err);
     }
   };
 
   const handleDelete = async (id) => {
     if (!confirm('Yakin ingin menghapus data ini?')) return;
+    if (!db) return;
     
     try {
-      await deleteDoc(doc(db, activeTab, id));
+      await db.collection(activeTab).doc(id).delete();
       await fetchData();
-    } catch (error) {
-      console.error('Error deleting document:', error);
-      alert('Gagal menghapus data: ' + error.message);
+    } catch (err) {
+      setError('Gagal menghapus data: ' + err.message);
+      console.error('Error deleting document:', err);
     }
   };
 
@@ -96,7 +118,8 @@ export default function Dashboard() {
           name: '',
           password: '',
           status: '',
-          youtubeShowcase: ''
+          youtubeShowcase: '',
+          linkdownload: ''
         }
       : { count: 0 };
     setEditingItem(newItem);
@@ -104,16 +127,16 @@ export default function Dashboard() {
   };
 
   const handleCreate = async () => {
-    if (!editingItem) return;
+    if (!editingItem || !db) return;
     
     try {
-      await addDoc(collection(db, activeTab), editingItem);
+      await db.collection(activeTab).add(editingItem);
       await fetchData();
       setModalOpen(false);
       setEditingItem(null);
-    } catch (error) {
-      console.error('Error creating document:', error);
-      alert('Gagal menambah data: ' + error.message);
+    } catch (err) {
+      setError('Gagal menambah data: ' + err.message);
+      console.error('Error creating document:', err);
     }
   };
 
@@ -170,6 +193,13 @@ export default function Dashboard() {
               {sidebarOpen && <span>Stats</span>}
             </button>
           </nav>
+
+          {sidebarOpen && (
+            <div className="mt-8 p-4 bg-gray-800 bg-opacity-50 rounded-lg">
+              <div className="text-sm text-gray-400 mb-2">Total Data</div>
+              <div className="text-2xl font-bold">{activeTab === 'scripts' ? scripts.length : stats.length}</div>
+            </div>
+          )}
         </div>
       </div>
 
@@ -182,7 +212,14 @@ export default function Dashboard() {
             <p className="text-gray-400">Kelola data {activeTab} Anda</p>
           </div>
 
-          {/* Search & Add */}
+          {/* Error Message */}
+          {error && (
+            <div className="mb-6 p-4 bg-red-900 bg-opacity-30 border border-red-700 rounded-xl text-red-200 animate-slideDown">
+              {error}
+            </div>
+          )}
+
+          {/* Search & Actions */}
           <div className="mb-6 flex gap-4 animate-slideDown">
             <div className="flex-1 relative">
               <Search className="absolute left-4 top-1/2 transform -translate-y-1/2 text-gray-400" size={20} />
@@ -194,6 +231,14 @@ export default function Dashboard() {
                 className="w-full pl-12 pr-4 py-3 bg-gray-800 bg-opacity-50 backdrop-blur-sm border border-gray-700 rounded-xl focus:outline-none focus:border-gray-500 transition-all duration-200"
               />
             </div>
+            <button
+              onClick={fetchData}
+              className="flex items-center gap-2 px-6 py-3 bg-gray-800 hover:bg-gray-700 rounded-xl transition-all duration-200 hover:shadow-lg"
+              disabled={loading}
+            >
+              <RefreshCw size={20} className={loading ? 'animate-spin' : ''} />
+              <span>Refresh</span>
+            </button>
             <button
               onClick={handleAdd}
               className="flex items-center gap-2 px-6 py-3 bg-gray-700 hover:bg-gray-600 rounded-xl transition-all duration-200 hover:shadow-lg"
@@ -207,6 +252,11 @@ export default function Dashboard() {
           {loading ? (
             <div className="flex items-center justify-center h-64">
               <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-gray-400"></div>
+            </div>
+          ) : filteredData.length === 0 ? (
+            <div className="bg-gray-800 bg-opacity-30 backdrop-blur-sm rounded-xl border border-gray-700 p-12 text-center">
+              <Database size={48} className="mx-auto mb-4 text-gray-600" />
+              <p className="text-gray-400 text-lg">Tidak ada data ditemukan</p>
             </div>
           ) : (
             <div className="bg-gray-800 bg-opacity-30 backdrop-blur-sm rounded-xl border border-gray-700 overflow-hidden animate-fadeIn">
@@ -391,12 +441,15 @@ export default function Dashboard() {
                   
                   <div>
                     <label className="block text-sm font-medium mb-2 text-gray-400">Status</label>
-                    <input
-                      type="text"
+                    <select
                       value={editingItem.status || ''}
                       onChange={(e) => setEditingItem({ ...editingItem, status: e.target.value })}
                       className="w-full px-4 py-3 bg-gray-800 border border-gray-700 rounded-xl focus:outline-none focus:border-gray-500 transition-all duration-200"
-                    />
+                    >
+                      <option value="">Pilih Status</option>
+                      <option value="yes">Yes</option>
+                      <option value="no">No</option>
+                    </select>
                   </div>
                   
                   <div>
@@ -405,21 +458,21 @@ export default function Dashboard() {
                       type="text"
                       value={editingItem.youtubeShowcase || ''}
                       onChange={(e) => setEditingItem({ ...editingItem, youtubeShowcase: e.target.value })}
+                      placeholder="https://..."
                       className="w-full px-4 py-3 bg-gray-800 border border-gray-700 rounded-xl focus:outline-none focus:border-gray-500 transition-all duration-200"
                     />
                   </div>
 
-                  {editingItem.linkdownload && (
-                    <div>
-                      <label className="block text-sm font-medium mb-2 text-gray-400">Link Download</label>
-                      <input
-                        type="text"
-                        value={editingItem.linkdownload || ''}
-                        onChange={(e) => setEditingItem({ ...editingItem, linkdownload: e.target.value })}
-                        className="w-full px-4 py-3 bg-gray-800 border border-gray-700 rounded-xl focus:outline-none focus:border-gray-500 transition-all duration-200"
-                      />
-                    </div>
-                  )}
+                  <div>
+                    <label className="block text-sm font-medium mb-2 text-gray-400">Link Download</label>
+                    <input
+                      type="text"
+                      value={editingItem.linkdownload || ''}
+                      onChange={(e) => setEditingItem({ ...editingItem, linkdownload: e.target.value })}
+                      placeholder="https://..."
+                      className="w-full px-4 py-3 bg-gray-800 border border-gray-700 rounded-xl focus:outline-none focus:border-gray-500 transition-all duration-200"
+                    />
+                  </div>
                 </>
               ) : (
                 <div>
@@ -456,7 +509,7 @@ export default function Dashboard() {
         </div>
       )}
 
-      <style jsx>{`
+      <style>{`
         @keyframes fadeIn {
           from { opacity: 0; }
           to { opacity: 1; }
