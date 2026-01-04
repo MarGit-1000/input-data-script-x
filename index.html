@@ -1,399 +1,501 @@
-<!DOCTYPE html>
-<html lang="id">
-<head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Script Manager - Add New Entry</title>
-    <style>
-        * {
-            margin: 0;
-            padding: 0;
-            box-sizing: border-box;
-        }
+import React, { useState, useEffect } from 'react';
+import { initializeApp } from 'firebase/app';
+import { getFirestore, collection, getDocs, doc, updateDoc, deleteDoc, addDoc } from 'firebase/firestore';
+import { Search, Edit2, Trash2, Plus, X, Save, Eye, EyeOff, Menu, Database, FileText } from 'lucide-react';
 
-        body {
-            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
-            background: linear-gradient(135deg, #1a1a1a 0%, #2d2d2d 100%);
-            min-height: 100vh;
-            padding: 20px;
-            color: #e0e0e0;
-        }
+const firebaseConfig = {
+  apiKey: "AIzaSyCldbqiZLTRvtQCfO9_2EiBGeND9fxALCE",
+  authDomain: "x-website-script.firebaseapp.com",
+  projectId: "x-website-script",
+  storageBucket: "x-website-script.firebasestorage.app",
+  messagingSenderId: "848346981755",
+  appId: "1:848346981755:web:aff6aa81591ff35f2509de"
+};
 
-        .container {
-            max-width: 800px;
-            margin: 0 auto;
-            animation: fadeIn 0.6s ease-out;
-        }
+const app = initializeApp(firebaseConfig);
+const db = getFirestore(app);
 
+export default function Dashboard() {
+  const [scripts, setScripts] = useState([]);
+  const [stats, setStats] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [searchTerm, setSearchTerm] = useState('');
+  const [activeTab, setActiveTab] = useState('scripts');
+  const [editingItem, setEditingItem] = useState(null);
+  const [showPassword, setShowPassword] = useState({});
+  const [sidebarOpen, setSidebarOpen] = useState(true);
+  const [modalOpen, setModalOpen] = useState(false);
+
+  useEffect(() => {
+    fetchData();
+  }, []);
+
+  const fetchData = async () => {
+    setLoading(true);
+    try {
+      const scriptsSnapshot = await getDocs(collection(db, 'scripts'));
+      const scriptsData = scriptsSnapshot.docs.map(doc => ({
+        id: doc.id,
+        ...doc.data()
+      }));
+      setScripts(scriptsData);
+
+      const statsSnapshot = await getDocs(collection(db, 'stats'));
+      const statsData = statsSnapshot.docs.map(doc => ({
+        id: doc.id,
+        ...doc.data()
+      }));
+      setStats(statsData);
+    } catch (error) {
+      console.error('Error fetching data:', error);
+    }
+    setLoading(false);
+  };
+
+  const handleEdit = (item) => {
+    setEditingItem({ ...item });
+    setModalOpen(true);
+  };
+
+  const handleSave = async () => {
+    if (!editingItem) return;
+    
+    try {
+      const collectionName = activeTab;
+      const docRef = doc(db, collectionName, editingItem.id);
+      const { id, ...dataToUpdate } = editingItem;
+      await updateDoc(docRef, dataToUpdate);
+      await fetchData();
+      setModalOpen(false);
+      setEditingItem(null);
+    } catch (error) {
+      console.error('Error updating document:', error);
+      alert('Gagal menyimpan perubahan: ' + error.message);
+    }
+  };
+
+  const handleDelete = async (id) => {
+    if (!confirm('Yakin ingin menghapus data ini?')) return;
+    
+    try {
+      await deleteDoc(doc(db, activeTab, id));
+      await fetchData();
+    } catch (error) {
+      console.error('Error deleting document:', error);
+      alert('Gagal menghapus data: ' + error.message);
+    }
+  };
+
+  const handleAdd = () => {
+    const newItem = activeTab === 'scripts' 
+      ? {
+          category: '',
+          content: '',
+          description: '',
+          latest: '',
+          name: '',
+          password: '',
+          status: '',
+          youtubeShowcase: ''
+        }
+      : { count: 0 };
+    setEditingItem(newItem);
+    setModalOpen(true);
+  };
+
+  const handleCreate = async () => {
+    if (!editingItem) return;
+    
+    try {
+      await addDoc(collection(db, activeTab), editingItem);
+      await fetchData();
+      setModalOpen(false);
+      setEditingItem(null);
+    } catch (error) {
+      console.error('Error creating document:', error);
+      alert('Gagal menambah data: ' + error.message);
+    }
+  };
+
+  const togglePasswordVisibility = (id) => {
+    setShowPassword(prev => ({ ...prev, [id]: !prev[id] }));
+  };
+
+  const filteredData = (activeTab === 'scripts' ? scripts : stats).filter(item => {
+    const searchLower = searchTerm.toLowerCase();
+    if (activeTab === 'scripts') {
+      return (
+        item.name?.toLowerCase().includes(searchLower) ||
+        item.category?.toLowerCase().includes(searchLower) ||
+        item.description?.toLowerCase().includes(searchLower)
+      );
+    }
+    return item.id?.toLowerCase().includes(searchLower);
+  });
+
+  return (
+    <div className="min-h-screen bg-gradient-to-br from-gray-900 via-gray-800 to-black text-gray-100">
+      {/* Sidebar */}
+      <div className={`fixed left-0 top-0 h-full bg-black bg-opacity-50 backdrop-blur-xl border-r border-gray-700 transition-all duration-300 ${sidebarOpen ? 'w-64' : 'w-20'} z-40`}>
+        <div className="p-6">
+          <div className="flex items-center justify-between mb-8">
+            {sidebarOpen && <h1 className="text-2xl font-bold bg-gradient-to-r from-gray-100 to-gray-400 bg-clip-text text-transparent">Dashboard</h1>}
+            <button onClick={() => setSidebarOpen(!sidebarOpen)} className="p-2 hover:bg-gray-800 rounded-lg transition-all duration-200">
+              <Menu size={24} />
+            </button>
+          </div>
+          
+          <nav className="space-y-2">
+            <button
+              onClick={() => setActiveTab('scripts')}
+              className={`w-full flex items-center gap-3 px-4 py-3 rounded-lg transition-all duration-200 ${
+                activeTab === 'scripts' 
+                  ? 'bg-gray-800 text-white shadow-lg' 
+                  : 'text-gray-400 hover:bg-gray-800 hover:text-white'
+              }`}
+            >
+              <FileText size={20} />
+              {sidebarOpen && <span>Scripts</span>}
+            </button>
+            
+            <button
+              onClick={() => setActiveTab('stats')}
+              className={`w-full flex items-center gap-3 px-4 py-3 rounded-lg transition-all duration-200 ${
+                activeTab === 'stats' 
+                  ? 'bg-gray-800 text-white shadow-lg' 
+                  : 'text-gray-400 hover:bg-gray-800 hover:text-white'
+              }`}
+            >
+              <Database size={20} />
+              {sidebarOpen && <span>Stats</span>}
+            </button>
+          </nav>
+        </div>
+      </div>
+
+      {/* Main Content */}
+      <div className={`transition-all duration-300 ${sidebarOpen ? 'ml-64' : 'ml-20'}`}>
+        <div className="p-8">
+          {/* Header */}
+          <div className="mb-8 animate-fadeIn">
+            <h2 className="text-3xl font-bold mb-2">{activeTab === 'scripts' ? 'Script Management' : 'Statistics'}</h2>
+            <p className="text-gray-400">Kelola data {activeTab} Anda</p>
+          </div>
+
+          {/* Search & Add */}
+          <div className="mb-6 flex gap-4 animate-slideDown">
+            <div className="flex-1 relative">
+              <Search className="absolute left-4 top-1/2 transform -translate-y-1/2 text-gray-400" size={20} />
+              <input
+                type="text"
+                placeholder="Cari data..."
+                value={searchTerm}
+                onChange={(e) => setSearchTerm(e.target.value)}
+                className="w-full pl-12 pr-4 py-3 bg-gray-800 bg-opacity-50 backdrop-blur-sm border border-gray-700 rounded-xl focus:outline-none focus:border-gray-500 transition-all duration-200"
+              />
+            </div>
+            <button
+              onClick={handleAdd}
+              className="flex items-center gap-2 px-6 py-3 bg-gray-700 hover:bg-gray-600 rounded-xl transition-all duration-200 hover:shadow-lg"
+            >
+              <Plus size={20} />
+              <span>Tambah</span>
+            </button>
+          </div>
+
+          {/* Data Table */}
+          {loading ? (
+            <div className="flex items-center justify-center h-64">
+              <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-gray-400"></div>
+            </div>
+          ) : (
+            <div className="bg-gray-800 bg-opacity-30 backdrop-blur-sm rounded-xl border border-gray-700 overflow-hidden animate-fadeIn">
+              <div className="overflow-x-auto">
+                <table className="w-full">
+                  <thead className="bg-gray-900 bg-opacity-50">
+                    <tr>
+                      {activeTab === 'scripts' ? (
+                        <>
+                          <th className="px-6 py-4 text-left text-sm font-semibold">Name</th>
+                          <th className="px-6 py-4 text-left text-sm font-semibold">Category</th>
+                          <th className="px-6 py-4 text-left text-sm font-semibold">Status</th>
+                          <th className="px-6 py-4 text-left text-sm font-semibold">Latest</th>
+                          <th className="px-6 py-4 text-left text-sm font-semibold">Password</th>
+                          <th className="px-6 py-4 text-right text-sm font-semibold">Actions</th>
+                        </>
+                      ) : (
+                        <>
+                          <th className="px-6 py-4 text-left text-sm font-semibold">Script ID</th>
+                          <th className="px-6 py-4 text-left text-sm font-semibold">Count</th>
+                          <th className="px-6 py-4 text-right text-sm font-semibold">Actions</th>
+                        </>
+                      )}
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-gray-700">
+                    {filteredData.map((item, index) => (
+                      <tr key={item.id} className="hover:bg-gray-800 hover:bg-opacity-50 transition-all duration-200" style={{ animationDelay: `${index * 50}ms` }}>
+                        {activeTab === 'scripts' ? (
+                          <>
+                            <td className="px-6 py-4 font-medium">{item.name}</td>
+                            <td className="px-6 py-4">
+                              <span className="px-3 py-1 bg-gray-700 rounded-full text-sm">{item.category}</span>
+                            </td>
+                            <td className="px-6 py-4">
+                              <span className={`px-3 py-1 rounded-full text-sm ${item.status === 'yes' ? 'bg-green-900 text-green-200' : 'bg-gray-700'}`}>
+                                {item.status}
+                              </span>
+                            </td>
+                            <td className="px-6 py-4 text-gray-400">{item.latest}</td>
+                            <td className="px-6 py-4">
+                              <div className="flex items-center gap-2">
+                                <span className="font-mono">{showPassword[item.id] ? item.password : '••••••'}</span>
+                                <button
+                                  onClick={() => togglePasswordVisibility(item.id)}
+                                  className="p-1 hover:bg-gray-700 rounded transition-all duration-200"
+                                >
+                                  {showPassword[item.id] ? <EyeOff size={16} /> : <Eye size={16} />}
+                                </button>
+                              </div>
+                            </td>
+                            <td className="px-6 py-4">
+                              <div className="flex items-center justify-end gap-2">
+                                <button
+                                  onClick={() => handleEdit(item)}
+                                  className="p-2 hover:bg-gray-700 rounded-lg transition-all duration-200"
+                                >
+                                  <Edit2 size={18} />
+                                </button>
+                                <button
+                                  onClick={() => handleDelete(item.id)}
+                                  className="p-2 hover:bg-red-900 hover:bg-opacity-30 rounded-lg transition-all duration-200"
+                                >
+                                  <Trash2 size={18} />
+                                </button>
+                              </div>
+                            </td>
+                          </>
+                        ) : (
+                          <>
+                            <td className="px-6 py-4 font-mono">{item.id}</td>
+                            <td className="px-6 py-4">
+                              <span className="px-3 py-1 bg-gray-700 rounded-full">{item.count}</span>
+                            </td>
+                            <td className="px-6 py-4">
+                              <div className="flex items-center justify-end gap-2">
+                                <button
+                                  onClick={() => handleEdit(item)}
+                                  className="p-2 hover:bg-gray-700 rounded-lg transition-all duration-200"
+                                >
+                                  <Edit2 size={18} />
+                                </button>
+                                <button
+                                  onClick={() => handleDelete(item.id)}
+                                  className="p-2 hover:bg-red-900 hover:bg-opacity-30 rounded-lg transition-all duration-200"
+                                >
+                                  <Trash2 size={18} />
+                                </button>
+                              </div>
+                            </td>
+                          </>
+                        )}
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          )}
+        </div>
+      </div>
+
+      {/* Edit Modal */}
+      {modalOpen && editingItem && (
+        <div className="fixed inset-0 bg-black bg-opacity-70 backdrop-blur-sm flex items-center justify-center z-50 animate-fadeIn">
+          <div className="bg-gray-900 rounded-2xl p-8 max-w-2xl w-full mx-4 border border-gray-700 max-h-[90vh] overflow-y-auto animate-scaleIn">
+            <div className="flex items-center justify-between mb-6">
+              <h3 className="text-2xl font-bold">{editingItem.id ? 'Edit Data' : 'Tambah Data'}</h3>
+              <button
+                onClick={() => {
+                  setModalOpen(false);
+                  setEditingItem(null);
+                }}
+                className="p-2 hover:bg-gray-800 rounded-lg transition-all duration-200"
+              >
+                <X size={24} />
+              </button>
+            </div>
+
+            <div className="space-y-4">
+              {activeTab === 'scripts' ? (
+                <>
+                  <div>
+                    <label className="block text-sm font-medium mb-2 text-gray-400">Name</label>
+                    <input
+                      type="text"
+                      value={editingItem.name || ''}
+                      onChange={(e) => setEditingItem({ ...editingItem, name: e.target.value })}
+                      className="w-full px-4 py-3 bg-gray-800 border border-gray-700 rounded-xl focus:outline-none focus:border-gray-500 transition-all duration-200"
+                    />
+                  </div>
+                  
+                  <div>
+                    <label className="block text-sm font-medium mb-2 text-gray-400">Category</label>
+                    <input
+                      type="text"
+                      value={editingItem.category || ''}
+                      onChange={(e) => setEditingItem({ ...editingItem, category: e.target.value })}
+                      className="w-full px-4 py-3 bg-gray-800 border border-gray-700 rounded-xl focus:outline-none focus:border-gray-500 transition-all duration-200"
+                    />
+                  </div>
+                  
+                  <div>
+                    <label className="block text-sm font-medium mb-2 text-gray-400">Content</label>
+                    <textarea
+                      value={editingItem.content || ''}
+                      onChange={(e) => setEditingItem({ ...editingItem, content: e.target.value })}
+                      rows={4}
+                      className="w-full px-4 py-3 bg-gray-800 border border-gray-700 rounded-xl focus:outline-none focus:border-gray-500 transition-all duration-200"
+                    />
+                  </div>
+                  
+                  <div>
+                    <label className="block text-sm font-medium mb-2 text-gray-400">Description</label>
+                    <textarea
+                      value={editingItem.description || ''}
+                      onChange={(e) => setEditingItem({ ...editingItem, description: e.target.value })}
+                      rows={3}
+                      className="w-full px-4 py-3 bg-gray-800 border border-gray-700 rounded-xl focus:outline-none focus:border-gray-500 transition-all duration-200"
+                    />
+                  </div>
+                  
+                  <div>
+                    <label className="block text-sm font-medium mb-2 text-gray-400">Latest</label>
+                    <input
+                      type="text"
+                      value={editingItem.latest || ''}
+                      onChange={(e) => setEditingItem({ ...editingItem, latest: e.target.value })}
+                      className="w-full px-4 py-3 bg-gray-800 border border-gray-700 rounded-xl focus:outline-none focus:border-gray-500 transition-all duration-200"
+                    />
+                  </div>
+                  
+                  <div>
+                    <label className="block text-sm font-medium mb-2 text-gray-400">Password</label>
+                    <input
+                      type="text"
+                      value={editingItem.password || ''}
+                      onChange={(e) => setEditingItem({ ...editingItem, password: e.target.value })}
+                      className="w-full px-4 py-3 bg-gray-800 border border-gray-700 rounded-xl focus:outline-none focus:border-gray-500 transition-all duration-200"
+                    />
+                  </div>
+                  
+                  <div>
+                    <label className="block text-sm font-medium mb-2 text-gray-400">Status</label>
+                    <input
+                      type="text"
+                      value={editingItem.status || ''}
+                      onChange={(e) => setEditingItem({ ...editingItem, status: e.target.value })}
+                      className="w-full px-4 py-3 bg-gray-800 border border-gray-700 rounded-xl focus:outline-none focus:border-gray-500 transition-all duration-200"
+                    />
+                  </div>
+                  
+                  <div>
+                    <label className="block text-sm font-medium mb-2 text-gray-400">YouTube Showcase</label>
+                    <input
+                      type="text"
+                      value={editingItem.youtubeShowcase || ''}
+                      onChange={(e) => setEditingItem({ ...editingItem, youtubeShowcase: e.target.value })}
+                      className="w-full px-4 py-3 bg-gray-800 border border-gray-700 rounded-xl focus:outline-none focus:border-gray-500 transition-all duration-200"
+                    />
+                  </div>
+
+                  {editingItem.linkdownload && (
+                    <div>
+                      <label className="block text-sm font-medium mb-2 text-gray-400">Link Download</label>
+                      <input
+                        type="text"
+                        value={editingItem.linkdownload || ''}
+                        onChange={(e) => setEditingItem({ ...editingItem, linkdownload: e.target.value })}
+                        className="w-full px-4 py-3 bg-gray-800 border border-gray-700 rounded-xl focus:outline-none focus:border-gray-500 transition-all duration-200"
+                      />
+                    </div>
+                  )}
+                </>
+              ) : (
+                <div>
+                  <label className="block text-sm font-medium mb-2 text-gray-400">Count</label>
+                  <input
+                    type="number"
+                    value={editingItem.count || 0}
+                    onChange={(e) => setEditingItem({ ...editingItem, count: parseInt(e.target.value) || 0 })}
+                    className="w-full px-4 py-3 bg-gray-800 border border-gray-700 rounded-xl focus:outline-none focus:border-gray-500 transition-all duration-200"
+                  />
+                </div>
+              )}
+            </div>
+
+            <div className="flex gap-3 mt-8">
+              <button
+                onClick={editingItem.id ? handleSave : handleCreate}
+                className="flex-1 flex items-center justify-center gap-2 px-6 py-3 bg-gray-700 hover:bg-gray-600 rounded-xl transition-all duration-200 hover:shadow-lg"
+              >
+                <Save size={20} />
+                <span>{editingItem.id ? 'Simpan' : 'Tambah'}</span>
+              </button>
+              <button
+                onClick={() => {
+                  setModalOpen(false);
+                  setEditingItem(null);
+                }}
+                className="px-6 py-3 bg-gray-800 hover:bg-gray-700 rounded-xl transition-all duration-200"
+              >
+                Batal
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      <style jsx>{`
         @keyframes fadeIn {
-            from {
-                opacity: 0;
-                transform: translateY(20px);
-            }
-            to {
-                opacity: 1;
-                transform: translateY(0);
-            }
+          from { opacity: 0; }
+          to { opacity: 1; }
         }
-
-        .header {
-            text-align: center;
-            margin-bottom: 40px;
-            padding: 30px;
-            background: rgba(255, 255, 255, 0.03);
-            border-radius: 12px;
-            border: 1px solid rgba(255, 255, 255, 0.1);
-            backdrop-filter: blur(10px);
-        }
-
-        .header h1 {
-            font-size: 2.2em;
-            font-weight: 300;
-            letter-spacing: 2px;
-            margin-bottom: 10px;
-            color: #ffffff;
-        }
-
-        .header p {
-            color: #999;
-            font-size: 0.95em;
-        }
-
-        .form-card {
-            background: rgba(255, 255, 255, 0.05);
-            border-radius: 16px;
-            padding: 40px;
-            border: 1px solid rgba(255, 255, 255, 0.1);
-            backdrop-filter: blur(10px);
-            box-shadow: 0 8px 32px rgba(0, 0, 0, 0.3);
-            transition: all 0.3s ease;
-        }
-
-        .form-card:hover {
-            border-color: rgba(255, 255, 255, 0.2);
-            box-shadow: 0 12px 48px rgba(0, 0, 0, 0.4);
-        }
-
-        .form-group {
-            margin-bottom: 25px;
-            animation: slideIn 0.4s ease-out backwards;
-        }
-
-        .form-group:nth-child(1) { animation-delay: 0.1s; }
-        .form-group:nth-child(2) { animation-delay: 0.15s; }
-        .form-group:nth-child(3) { animation-delay: 0.2s; }
-        .form-group:nth-child(4) { animation-delay: 0.25s; }
-        .form-group:nth-child(5) { animation-delay: 0.3s; }
-        .form-group:nth-child(6) { animation-delay: 0.35s; }
-        .form-group:nth-child(7) { animation-delay: 0.4s; }
-        .form-group:nth-child(8) { animation-delay: 0.45s; }
-        .form-group:nth-child(9) { animation-delay: 0.5s; }
-        .form-group:nth-child(10) { animation-delay: 0.55s; }
-
-        @keyframes slideIn {
-            from {
-                opacity: 0;
-                transform: translateX(-20px);
-            }
-            to {
-                opacity: 1;
-                transform: translateX(0);
-            }
-        }
-
-        label {
-            display: block;
-            margin-bottom: 8px;
-            color: #b0b0b0;
-            font-size: 0.9em;
-            font-weight: 500;
-            letter-spacing: 0.5px;
-            text-transform: uppercase;
-        }
-
-        input, textarea, select {
-            width: 100%;
-            padding: 14px 16px;
-            background: rgba(255, 255, 255, 0.05);
-            border: 1px solid rgba(255, 255, 255, 0.1);
-            border-radius: 8px;
-            color: #ffffff;
-            font-size: 1em;
-            transition: all 0.3s ease;
-            font-family: inherit;
-        }
-
-        input:focus, textarea:focus, select:focus {
-            outline: none;
-            border-color: rgba(255, 255, 255, 0.3);
-            background: rgba(255, 255, 255, 0.08);
-            box-shadow: 0 0 0 3px rgba(255, 255, 255, 0.05);
-        }
-
-        textarea {
-            min-height: 100px;
-            resize: vertical;
-        }
-
-        select {
-            cursor: pointer;
-        }
-
-        .btn-container {
-            display: flex;
-            gap: 15px;
-            margin-top: 35px;
-        }
-
-        button {
-            flex: 1;
-            padding: 16px;
-            border: none;
-            border-radius: 8px;
-            font-size: 1em;
-            font-weight: 600;
-            cursor: pointer;
-            transition: all 0.3s ease;
-            text-transform: uppercase;
-            letter-spacing: 1px;
-        }
-
-        .btn-submit {
-            background: linear-gradient(135deg, #ffffff 0%, #e0e0e0 100%);
-            color: #1a1a1a;
-        }
-
-        .btn-submit:hover {
-            background: linear-gradient(135deg, #e0e0e0 0%, #c0c0c0 100%);
-            transform: translateY(-2px);
-            box-shadow: 0 6px 20px rgba(255, 255, 255, 0.2);
-        }
-
-        .btn-submit:active {
-            transform: translateY(0);
-        }
-
-        .btn-reset {
-            background: rgba(255, 255, 255, 0.1);
-            color: #ffffff;
-            border: 1px solid rgba(255, 255, 255, 0.2);
-        }
-
-        .btn-reset:hover {
-            background: rgba(255, 255, 255, 0.15);
-            border-color: rgba(255, 255, 255, 0.3);
-        }
-
-        button:disabled {
-            opacity: 0.5;
-            cursor: not-allowed;
-        }
-
-        .status-message {
-            margin-top: 20px;
-            padding: 15px;
-            border-radius: 8px;
-            text-align: center;
-            animation: slideDown 0.3s ease-out;
-            display: none;
-        }
-
+        
         @keyframes slideDown {
-            from {
-                opacity: 0;
-                transform: translateY(-10px);
-            }
-            to {
-                opacity: 1;
-                transform: translateY(0);
-            }
+          from {
+            opacity: 0;
+            transform: translateY(-20px);
+          }
+          to {
+            opacity: 1;
+            transform: translateY(0);
+          }
         }
-
-        .status-message.success {
-            background: rgba(76, 175, 80, 0.2);
-            border: 1px solid rgba(76, 175, 80, 0.3);
-            color: #a5d6a7;
+        
+        @keyframes scaleIn {
+          from {
+            opacity: 0;
+            transform: scale(0.9);
+          }
+          to {
+            opacity: 1;
+            transform: scale(1);
+          }
         }
-
-        .status-message.error {
-            background: rgba(244, 67, 54, 0.2);
-            border: 1px solid rgba(244, 67, 54, 0.3);
-            color: #ef9a9a;
+        
+        .animate-fadeIn {
+          animation: fadeIn 0.5s ease-out;
         }
-
-        .loading {
-            display: inline-block;
-            width: 16px;
-            height: 16px;
-            border: 2px solid rgba(255, 255, 255, 0.3);
-            border-top-color: #1a1a1a;
-            border-radius: 50%;
-            animation: spin 0.6s linear infinite;
-            margin-left: 10px;
+        
+        .animate-slideDown {
+          animation: slideDown 0.5s ease-out;
         }
-
-        @keyframes spin {
-            to { transform: rotate(360deg); }
+        
+        .animate-scaleIn {
+          animation: scaleIn 0.3s ease-out;
         }
-
-        @media (max-width: 600px) {
-            .container {
-                padding: 10px;
-            }
-
-            .form-card {
-                padding: 25px;
-            }
-
-            .header h1 {
-                font-size: 1.6em;
-            }
-
-            .btn-container {
-                flex-direction: column;
-            }
-        }
-    </style>
-</head>
-<body>
-    <div class="container">
-        <div class="header">
-            <h1>SCRIPT MANAGER</h1>
-            <p>Add New Entry to Firebase Database</p>
-        </div>
-
-        <div class="form-card">
-            <form id="scriptForm">
-                <div class="form-group">
-                    <label for="category">Category *</label>
-                    <select id="category" required>
-                        <option value="">Select Category</option>
-                        <option value="Growlauncher">Growlauncher</option>
-                        <option value="GTPS">GTPS</option>
-                        <option value="RGT">RGT</option>
-                        <option value="Genta">Genta</option>
-                    </select>
-                </div>
-
-                <div class="form-group">
-                    <label for="name">Name *</label>
-                    <input type="text" id="name" required placeholder="Enter script name">
-                </div>
-
-                <div class="form-group">
-                    <label for="content">Content *</label>
-                    <textarea id="content" required placeholder="Enter content description"></textarea>
-                </div>
-
-                <div class="form-group">
-                    <label for="description">Description *</label>
-                    <input type="text" id="description" required placeholder="Enter description">
-                </div>
-
-                <div class="form-group">
-                    <label for="latest">Latest *</label>
-                    <input type="text" id="latest" required placeholder="e.g., yes, v1.0, V5.24">
-                </div>
-
-                <div class="form-group">
-                    <label for="password">Password</label>
-                    <input type="text" id="password" placeholder="Enter password (optional)">
-                </div>
-
-                <div class="form-group">
-                    <label for="status">Status *</label>
-                    <input type="text" id="status" required placeholder="e.g., V6.1.29">
-                </div>
-
-                <div class="form-group">
-                    <label for="linkdownload">Link Download</label>
-                    <input type="url" id="linkdownload" placeholder="https://example.com/download">
-                </div>
-
-                <div class="form-group">
-                    <label for="youtubeShowcase">YouTube Showcase</label>
-                    <input type="url" id="youtubeShowcase" placeholder="https://youtube.com/...">
-                </div>
-
-                <div class="form-group">
-                    <label for="youtubeTutorial">YouTube Tutorial</label>
-                    <input type="url" id="youtubeTutorial" placeholder="https://youtube.com/...">
-                </div>
-
-                <div class="btn-container">
-                    <button type="submit" class="btn-submit">
-                        Submit
-                    </button>
-                    <button type="reset" class="btn-reset">Reset</button>
-                </div>
-
-                <div id="statusMessage" class="status-message"></div>
-            </form>
-        </div>
+      `}</style>
     </div>
-
-    <script type="module">
-        import { initializeApp } from 'https://www.gstatic.com/firebasejs/10.7.1/firebase-app.js';
-        import { getFirestore, collection, addDoc } from 'https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore.js';
-
-        const firebaseConfig = {
-            apiKey: "AIzaSyCldbqiZLTRvtQCfO9_2EiBGeND9fxALCE",
-            authDomain: "x-website-script.firebaseapp.com",
-            projectId: "x-website-script",
-            storageBucket: "x-website-script.firebasestorage.app",
-            messagingSenderId: "848346981755",
-            appId: "1:848346981755:web:aff6aa81591ff35f2509de"
-        };
-
-        const app = initializeApp(firebaseConfig);
-        const db = getFirestore(app);
-
-        const form = document.getElementById('scriptForm');
-        const statusMessage = document.getElementById('statusMessage');
-
-        function showMessage(message, type) {
-            statusMessage.textContent = message;
-            statusMessage.className = `status-message ${type}`;
-            statusMessage.style.display = 'block';
-            
-            setTimeout(() => {
-                statusMessage.style.display = 'none';
-            }, 5000);
-        }
-
-        form.addEventListener('submit', async (e) => {
-            e.preventDefault();
-            
-            const submitBtn = form.querySelector('.btn-submit');
-            const originalText = submitBtn.textContent;
-            submitBtn.innerHTML = 'Submitting <span class="loading"></span>';
-            submitBtn.disabled = true;
-
-            const formData = {
-                category: document.getElementById('category').value,
-                name: document.getElementById('name').value,
-                content: document.getElementById('content').value,
-                description: document.getElementById('description').value,
-                latest: document.getElementById('latest').value,
-                password: document.getElementById('password').value || '',
-                status: document.getElementById('status').value,
-                linkdownload: document.getElementById('linkdownload').value || '',
-                youtubeShowcase: document.getElementById('youtubeShowcase').value || '',
-                youtubeTutorial: document.getElementById('youtubeTutorial').value || ''
-            };
-
-            try {
-                const docRef = await addDoc(collection(db, 'scripts'), formData);
-                showMessage('✓ Data berhasil ditambahkan! Document ID: ' + docRef.id, 'success');
-                form.reset();
-            } catch (error) {
-                console.error('Error:', error);
-                showMessage('✗ Error: ' + error.message, 'error');
-            } finally {
-                submitBtn.textContent = originalText;
-                submitBtn.disabled = false;
-            }
-        });
-    </script>
-</body>
-</html>
+  );
+}
